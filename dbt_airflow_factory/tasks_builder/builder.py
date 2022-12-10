@@ -124,11 +124,9 @@ class DbtAirflowTasksBuilder:
         with task_group_ctx:
             run_task = self._make_dbt_run_task(model_name, is_in_task_group)
             test_task = self._make_dbt_test_task(model_name, is_in_task_group)
-            # noinspection PyStatementEffect
-            run_task >> test_task
-            if self.airflow_config.run_tests_last:
-                run_task >> all_runs_passed_task.get_start_task()
-                all_runs_passed_task.get_end_task() >> test_task
+            if not self.airflow_config.run_tests_last:
+                # noinspection PyStatementEffect
+                run_task >> test_task
         return ModelExecutionTask(run_task, test_task, task_group)
 
     def _create_task_from_graph_node(
@@ -154,18 +152,22 @@ class DbtAirflowTasksBuilder:
             )
 
     def _create_tasks_from_graph(self, dbt_airflow_graph: DbtAirflowGraph) -> ModelExecutionTasks:
-        all_runs_passed_task = (
-            self._create_dummy_task({"select": "all_runs_finished"})
-            if self.airflow_config.run_tests_last
-            else None
-        )
         result_tasks = {
-            node_name: self._create_task_from_graph_node(node_name, node, all_runs_passed_task)
+            node_name: self._create_task_from_graph_node(node_name, node)
             for node_name, node in dbt_airflow_graph.graph.nodes(data=True)
         }
         for node, neighbour in dbt_airflow_graph.graph.edges():
             # noinspection PyStatementEffect
-            (result_tasks[node].get_end_task() >> result_tasks[neighbour].get_start_task())
+            if self.airflow_config.run_tests_last:
+                (result_tasks[node].get_start_task() >> result_tasks[neighbour].get_start_task())
+                if result_tasks[node].test_airflow_task:
+                    (
+                        result_tasks["all_models_passed"].get_start_task()
+                        >> result_tasks[node].test_airflow_task
+                    )
+            else:
+                (result_tasks[node].get_end_task() >> result_tasks[neighbour].get_start_task())
+
         return ModelExecutionTasks(
             result_tasks,
             dbt_airflow_graph.get_graph_sources(),
@@ -181,7 +183,7 @@ class DbtAirflowTasksBuilder:
 
     def _create_tasks_graph(self, manifest: dict) -> DbtAirflowGraph:
 
-        dbt_airflow_graph = DbtAirflowGraph(self.gateway_config)
+        dbt_airflow_graph = DbtAirflowGraph(self.gateway_config, self.airflow_config)
         dbt_airflow_graph.add_execution_tasks(manifest)
         if self.airflow_config.enable_dags_dependencies:
             dbt_airflow_graph.add_external_dependencies(manifest)

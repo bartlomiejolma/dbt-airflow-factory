@@ -137,7 +137,7 @@ def test_should_properly_map_tasks_with_source():
 
     assert gateway_task.upstream_task_ids == {"my_first_dbt_model_run"}
 
-    all_models_run_task = [task for task in dag.tasks if task.task_id == "all_runs_finished"][0]
+    all_models_run_task = [task for task in dag.tasks if task.task_id == "all_models_passed"][0]
 
     assert all_models_run_task.downstream_task_ids == {"my_second_dbt_model_run"}
 
