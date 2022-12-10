@@ -1,7 +1,7 @@
 """Class parsing ``manifest.json`` into Airflow tasks."""
 import json
 import logging
-from typing import Any, ContextManager, Dict, Tuple
+from typing import Any, ContextManager, Dict, Tuple, Optional
 
 import airflow
 from airflow.models.baseoperator import BaseOperator
@@ -114,6 +114,7 @@ class DbtAirflowTasksBuilder:
         model_name: str,
         is_ephemeral_task: bool,
         use_task_group: bool,
+        all_runs_passed_task: Optional[ModelExecutionTask] = None,
     ) -> ModelExecutionTask:
         if is_ephemeral_task:
             return ModelExecutionTask(EphemeralOperator(task_id=f"{model_name}__ephemeral"), None)
@@ -125,10 +126,16 @@ class DbtAirflowTasksBuilder:
             test_task = self._make_dbt_test_task(model_name, is_in_task_group)
             # noinspection PyStatementEffect
             run_task >> test_task
+            if self.airflow_config.run_tests_last:
+                run_task >> all_runs_passed_task.get_start_task()
+                all_runs_passed_task.get_end_task() >> test_task
         return ModelExecutionTask(run_task, test_task, task_group)
 
     def _create_task_from_graph_node(
-        self, node_name: str, node: Dict[str, Any]
+        self,
+        node_name: str,
+        node: Dict[str, Any],
+        all_runs_passed_task: Optional[ModelExecutionTask] = None,
     ) -> ModelExecutionTask:
         if node["node_type"] == NodeType.MULTIPLE_DEPS_TEST:
             return ModelExecutionTask(
@@ -143,11 +150,17 @@ class DbtAirflowTasksBuilder:
                 node["select"],
                 node["node_type"] == NodeType.EPHEMERAL,
                 self.airflow_config.use_task_group,
+                all_runs_passed_task,
             )
 
     def _create_tasks_from_graph(self, dbt_airflow_graph: DbtAirflowGraph) -> ModelExecutionTasks:
+        all_runs_passed_task = (
+            self._create_dummy_task({"select": "all_runs_finished"})
+            if self.airflow_config.run_tests_last
+            else None
+        )
         result_tasks = {
-            node_name: self._create_task_from_graph_node(node_name, node)
+            node_name: self._create_task_from_graph_node(node_name, node, all_runs_passed_task)
             for node_name, node in dbt_airflow_graph.graph.nodes(data=True)
         }
         for node, neighbour in dbt_airflow_graph.graph.edges():

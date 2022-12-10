@@ -126,16 +126,25 @@ def test_should_properly_map_tasks_with_source():
     assert save_points.__len__() == 2
 
     # and number of tasks should be as expected
-    assert dag.tasks.__len__() == 7
+    assert dag.tasks.__len__() == 8
 
     # and tasks should be correctly matched to themselves
     gateway_task = [
         task for task in dag.tasks if task.task_id == f"{save_points[0]}_{save_points[1]}_gateway"
     ][0]
 
-    assert gateway_task.downstream_task_ids == {"my_second_dbt_model.run"}
+    assert gateway_task.downstream_task_ids == {"my_second_dbt_model_run"}
 
-    assert gateway_task.upstream_task_ids == {"my_first_dbt_model.test"}
+    assert gateway_task.upstream_task_ids == {"my_first_dbt_model_run"}
+
+    all_models_run_task = [task for task in dag.tasks if task.task_id == "all_runs_finished"][0]
+
+    assert all_models_run_task.downstream_task_ids == {"my_second_dbt_model_run"}
+
+    assert all_models_run_task.upstream_task_ids == {
+        "my_first_dbt_model_test",
+        "my_second_dbt_model_test",
+    }
 
 
 @pytest.mark.parametrize(

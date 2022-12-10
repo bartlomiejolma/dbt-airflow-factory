@@ -19,9 +19,10 @@ dag:
 
 seed_task: True
 manifest_file_name: ../tests/manifest_gateway_source.json
-use_task_group: True
+use_task_group: False
 dags_path: "gs://example-bucket/dags/experimental-sandbox"
 show_ephemeral_models: True
+run_tests_last: True
 save_points:
   - "stage_schema_stage"
   - "stage_schema_data_mart"
