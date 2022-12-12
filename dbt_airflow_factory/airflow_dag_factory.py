@@ -115,7 +115,11 @@ class AirflowDagFactory:
     def _add_ending_task_with_dependencies(self, tasks: ModelExecutionTasks) -> None:
         end = DummyOperator(task_id="end")
         if self.airflow_config.get("run_tests_last"):
+            all_models_passed_task = DummyOperator(task_id="all_models_passed")
+            for ending_task in tasks.get_ending_tasks():
+                ending_task.get_start_task() >> all_models_passed_task
             for test_task in tasks.get_test_operators():
+                all_models_passed_task >> test_task
                 test_task >> end
         else:
             for ending_task in tasks.get_ending_tasks():

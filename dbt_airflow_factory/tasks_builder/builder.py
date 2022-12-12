@@ -1,7 +1,7 @@
 """Class parsing ``manifest.json`` into Airflow tasks."""
 import json
 import logging
-from typing import Any, ContextManager, Dict, Tuple, Optional
+from typing import Any, ContextManager, Dict, Tuple
 
 import airflow
 from airflow.models.baseoperator import BaseOperator
@@ -114,7 +114,6 @@ class DbtAirflowTasksBuilder:
         model_name: str,
         is_ephemeral_task: bool,
         use_task_group: bool,
-        all_runs_passed_task: Optional[ModelExecutionTask] = None,
     ) -> ModelExecutionTask:
         if is_ephemeral_task:
             return ModelExecutionTask(EphemeralOperator(task_id=f"{model_name}__ephemeral"), None)
@@ -133,7 +132,6 @@ class DbtAirflowTasksBuilder:
         self,
         node_name: str,
         node: Dict[str, Any],
-        all_runs_passed_task: Optional[ModelExecutionTask] = None,
     ) -> ModelExecutionTask:
         if node["node_type"] == NodeType.MULTIPLE_DEPS_TEST:
             return ModelExecutionTask(
@@ -148,7 +146,6 @@ class DbtAirflowTasksBuilder:
                 node["select"],
                 node["node_type"] == NodeType.EPHEMERAL,
                 self.airflow_config.use_task_group,
-                all_runs_passed_task,
             )
 
     def _create_tasks_from_graph(self, dbt_airflow_graph: DbtAirflowGraph) -> ModelExecutionTasks:
@@ -160,11 +157,6 @@ class DbtAirflowTasksBuilder:
             # noinspection PyStatementEffect
             if self.airflow_config.run_tests_last:
                 (result_tasks[node].get_start_task() >> result_tasks[neighbour].get_start_task())
-                if result_tasks[node].test_airflow_task:
-                    (
-                        result_tasks["all_models_passed"].get_start_task()
-                        >> result_tasks[node].test_airflow_task
-                    )
             else:
                 (result_tasks[node].get_end_task() >> result_tasks[neighbour].get_start_task())
 
@@ -183,7 +175,7 @@ class DbtAirflowTasksBuilder:
 
     def _create_tasks_graph(self, manifest: dict) -> DbtAirflowGraph:
 
-        dbt_airflow_graph = DbtAirflowGraph(self.gateway_config, self.airflow_config)
+        dbt_airflow_graph = DbtAirflowGraph(self.gateway_config)
         dbt_airflow_graph.add_execution_tasks(manifest)
         if self.airflow_config.enable_dags_dependencies:
             dbt_airflow_graph.add_external_dependencies(manifest)

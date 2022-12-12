@@ -1,6 +1,5 @@
 import itertools
 import logging
-from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
 import networkx as nx
@@ -24,20 +23,15 @@ from dbt_airflow_factory.tasks_builder.utils import (
 )
 
 
-@dataclass
-class TestsConfiguration:
-    run_tests_last: bool
-
-
 class DbtAirflowGraph:
     graph: nx.DiGraph
 
     def __init__(
-        self, configuration: TaskGraphConfiguration, tests_configuration: TestsConfiguration
+        self,
+        configuration: TaskGraphConfiguration,
     ) -> None:
         self.graph = nx.DiGraph()
         self.configuration = configuration
-        self.tests_configuration = tests_configuration
 
     def add_execution_tasks(self, manifest: dict) -> None:
         self._add_gateway_execution_tasks(manifest=manifest)
@@ -53,7 +47,6 @@ class DbtAirflowGraph:
             ):
                 logging.info("Creating tasks for: " + node_name)
                 self._add_graph_node_for_multiple_deps_test(node_name, manifest_node, manifest)
-        self._add_all_models_passed_task()
 
     def _add_gateway_execution_tasks(self, manifest: dict) -> None:
         if self.configuration.gateway.separation_schemas.__len__() >= 2:
@@ -68,22 +61,6 @@ class DbtAirflowGraph:
                         left=separation_layer_left, right=separation_layer_right
                     ),
                 )
-
-    def _add_all_models_passed_task(self) -> None:
-        if not self.tests_configuration.run_tests_last:
-            return
-        node_name = "all_models_passed"
-        self.graph.nodes
-        self.graph.add_node(
-            node_name,
-            select=node_name,
-            depends_on=[
-                name
-                for name, node in self.graph.nodes(data=True)
-                if node.get("node_type", "") == NodeType.RUN_TEST
-            ],
-            node_type=NodeType.MOCK_GATEWAY,
-        )
 
     def add_external_dependencies(self, manifest: dict) -> None:
         manifest_child_map = manifest["child_map"]
