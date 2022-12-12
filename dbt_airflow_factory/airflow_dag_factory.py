@@ -19,6 +19,7 @@ from dbt_airflow_factory.builder_factory import DbtAirflowTasksBuilderFactory
 from dbt_airflow_factory.config_utils import read_config, read_env_config
 from dbt_airflow_factory.notifications.handler import NotificationHandlersFactory
 from dbt_airflow_factory.tasks_builder.builder import DbtAirflowTasksBuilder
+from dbt_airflow_factory.tasks import ModelExecutionTasks
 
 
 class AirflowDagFactory:
@@ -106,12 +107,19 @@ class AirflowDagFactory:
             builder = self.ingestion_tasks_builder_factory.create()
             ingestion_tasks = builder.build()
             ingestion_tasks >> start
-        end = DummyOperator(task_id="end")
         tasks = self._builder.parse_manifest_into_tasks(self._manifest_file_path())
         for starting_task in tasks.get_starting_tasks():
             start >> starting_task.get_start_task()
-        for ending_task in tasks.get_ending_tasks():
-            ending_task.get_end_task() >> end
+        self._add_ending_task_with_dependencies(tasks)
+
+    def _add_ending_task_with_dependencies(self, tasks: ModelExecutionTasks) -> None:
+        end = DummyOperator(task_id="end")
+        if self.airflow_config.get("run_tests_last"):
+            for test_task in tasks.get_test_operators():
+                test_task >> end
+        else:
+            for ending_task in tasks.get_ending_tasks():
+                ending_task.get_end_task() >> end
 
     def _create_starting_task(self) -> BaseOperator:
         if self.airflow_config.get("seed_task", True):

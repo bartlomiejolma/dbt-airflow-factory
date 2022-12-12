@@ -139,9 +139,12 @@ def test_should_properly_map_tasks_with_source():
 
     all_models_run_task = [task for task in dag.tasks if task.task_id == "all_models_passed"][0]
 
-    assert all_models_run_task.downstream_task_ids == {"my_second_dbt_model_run"}
-
     assert all_models_run_task.upstream_task_ids == {
+        "my_first_dbt_model_run",
+        "my_second_dbt_model_run",
+    }
+
+    assert all_models_run_task.downstream_task_ids == {
         "my_first_dbt_model_test",
         "my_second_dbt_model_test",
     }

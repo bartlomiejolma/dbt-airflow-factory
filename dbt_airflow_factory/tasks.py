@@ -118,3 +118,14 @@ class ModelExecutionTasks:
         for key in keys:
             tasks.append(self._tasks[key])
         return tasks
+
+    def get_test_operators(self) -> List[BaseOperator]:
+        """
+
+        Get a list of all DAG test operators
+
+        :return: List of all test operators
+        :rtype: List[BaseOperator]
+        """
+
+        return [task.test_airflow_task for task in self._tasks.values() if task.test_airflow_task]
