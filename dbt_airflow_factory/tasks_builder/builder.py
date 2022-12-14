@@ -184,7 +184,8 @@ class DbtAirflowTasksBuilder:
         )
         if not self.airflow_config.show_ephemeral_models:
             dbt_airflow_graph.remove_ephemeral_nodes_from_graph()
-        dbt_airflow_graph.contract_test_nodes()
+        if not self.airflow_config.run_tests_last:
+            dbt_airflow_graph.contract_test_nodes()
         return dbt_airflow_graph
 
     def _create_dag_sensor(self, node: Dict[str, Any]) -> ModelExecutionTask:
