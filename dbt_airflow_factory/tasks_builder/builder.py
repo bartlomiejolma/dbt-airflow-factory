@@ -134,9 +134,7 @@ class DbtAirflowTasksBuilder:
         node: Dict[str, Any],
     ) -> ModelExecutionTask:
         if node["node_type"] == NodeType.MULTIPLE_DEPS_TEST:
-            return ModelExecutionTask(
-                self._make_dbt_multiple_deps_test_task(node["select"], node_name), None
-            )
+            return self._multiple_deps_test_model_execution_task(node_name, node)
         elif node["node_type"] == NodeType.SOURCE_SENSOR:
             return self._create_dag_sensor(node)
         elif node["node_type"] == NodeType.MOCK_GATEWAY:
@@ -146,6 +144,18 @@ class DbtAirflowTasksBuilder:
                 node["select"],
                 node["node_type"] == NodeType.EPHEMERAL,
                 self.airflow_config.use_task_group,
+            )
+
+    def _multiple_deps_test_model_execution_task(self, node_name: str, node: Dict[str, Any]):
+        if self.airflow_config.run_tests_last:
+            return ModelExecutionTask(
+                DummyOperator(task_id=f"dummy_{node_name}"),
+                self._make_dbt_multiple_deps_test_task(node["select"], node_name),
+            )
+        else:
+            return ModelExecutionTask(
+                self._make_dbt_multiple_deps_test_task(node["select"], node_name),
+                None,
             )
 
     def _create_tasks_from_graph(self, dbt_airflow_graph: DbtAirflowGraph) -> ModelExecutionTasks:
@@ -184,8 +194,7 @@ class DbtAirflowTasksBuilder:
         )
         if not self.airflow_config.show_ephemeral_models:
             dbt_airflow_graph.remove_ephemeral_nodes_from_graph()
-        if not self.airflow_config.run_tests_last:
-            dbt_airflow_graph.contract_test_nodes()
+        dbt_airflow_graph.contract_test_nodes()
         return dbt_airflow_graph
 
     def _create_dag_sensor(self, node: Dict[str, Any]) -> ModelExecutionTask:
