@@ -170,15 +170,16 @@ class DbtAirflowTasksBuilder:
             else:
                 (result_tasks[node].get_end_task() >> result_tasks[neighbour].get_start_task())
 
-        source_names = [
+        source_names = dbt_airflow_graph.get_graph_sources()
+        sink_names = [
             source_name
-            for source_name in dbt_airflow_graph.get_graph_sources()
+            for source_name in dbt_airflow_graph.get_graph_sinks()
             if "test_connection" not in source_name
         ]
         return ModelExecutionTasks(
             result_tasks,
             source_names,
-            dbt_airflow_graph.get_graph_sinks(),
+            sink_names,
         )
 
     def _make_dbt_tasks(self, manifest_path: str) -> ModelExecutionTasks:
