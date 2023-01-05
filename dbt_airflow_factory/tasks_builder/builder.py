@@ -170,9 +170,14 @@ class DbtAirflowTasksBuilder:
             else:
                 (result_tasks[node].get_end_task() >> result_tasks[neighbour].get_start_task())
 
+        source_names = [
+            source_name
+            for source_name in dbt_airflow_graph.get_graph_sources()
+            if "dummy" not in source_name
+        ]
         return ModelExecutionTasks(
             result_tasks,
-            dbt_airflow_graph.get_graph_sources(),
+            source_names,
             dbt_airflow_graph.get_graph_sinks(),
         )
 
