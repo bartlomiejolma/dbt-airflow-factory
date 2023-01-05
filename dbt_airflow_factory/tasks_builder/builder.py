@@ -149,7 +149,7 @@ class DbtAirflowTasksBuilder:
     def _multiple_deps_test_model_execution_task(self, node_name: str, node: Dict[str, Any]):
         if self.airflow_config.run_tests_last:
             return ModelExecutionTask(
-                DummyOperator(task_id=f"dummy_{node_name}"),
+                DummyOperator(task_id=f"test_connection_{node_name}"),
                 self._make_dbt_multiple_deps_test_task(node["select"], node_name),
             )
         else:
@@ -173,7 +173,7 @@ class DbtAirflowTasksBuilder:
         source_names = [
             source_name
             for source_name in dbt_airflow_graph.get_graph_sources()
-            if "dummy" not in source_name
+            if "test_connection" not in source_name
         ]
         return ModelExecutionTasks(
             result_tasks,
