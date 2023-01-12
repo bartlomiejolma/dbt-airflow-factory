@@ -69,11 +69,19 @@ class DbtAirflowGraph:
                 logging.info("Creating source sensor for: " + source_name)
                 self._add_sensor_source_node(source_name, manifest_source)
 
-    def create_edges_from_dependencies(self, include_sensors: bool = False) -> None:
+    def create_edges_from_dependencies(
+        self, include_sensors: bool = False, include_contract_tests_dependencies: bool = True
+    ) -> None:
         for graph_node_name, graph_node in self.graph.nodes(data=True):
+            if (
+                graph_node["node_type"] == NodeType.MULTIPLE_DEPS_TEST
+                and not include_contract_tests_dependencies
+            ):
+                continue
             for dependency in graph_node.get("depends_on", []):
-                if not is_source_sensor_task(dependency) or include_sensors:
-                    self.graph.add_edge(dependency, graph_node_name)
+                if is_source_sensor_task(dependency) and not include_sensors:
+                    continue
+                self.graph.add_edge(dependency, graph_node_name)
 
     def get_graph_sources(self) -> List[str]:
         return [

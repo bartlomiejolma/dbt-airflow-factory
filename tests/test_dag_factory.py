@@ -126,7 +126,7 @@ def test_should_properly_map_tasks_with_source():
     assert save_points.__len__() == 2
 
     # and number of tasks should be as expected
-    assert dag.tasks.__len__() == 8
+    assert dag.tasks.__len__() == 9
 
     # and tasks should be correctly matched to themselves
     gateway_task = [
@@ -146,6 +146,7 @@ def test_should_properly_map_tasks_with_source():
     assert all_models_run_task.downstream_task_ids == {
         "my_first_dbt_model_test",
         "my_second_dbt_model_test",
+        'my_first_dbt_model_my_second_dbt_model_test',
     }
 
 

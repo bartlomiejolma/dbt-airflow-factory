@@ -149,7 +149,7 @@ class DbtAirflowTasksBuilder:
     def _multiple_deps_test_model_execution_task(self, node_name: str, node: Dict[str, Any]):
         if self.airflow_config.run_tests_last:
             return ModelExecutionTask(
-                DummyOperator(task_id=f"test_connection_{node_name}"),
+                None,
                 self._make_dbt_multiple_deps_test_task(node["select"], node_name),
             )
         else:
@@ -166,15 +166,23 @@ class DbtAirflowTasksBuilder:
         for node, neighbour in dbt_airflow_graph.graph.edges():
             # noinspection PyStatementEffect
             if self.airflow_config.run_tests_last:
-                (result_tasks[node].get_start_task() >> result_tasks[neighbour].get_start_task())
+                if result_tasks[neighbour].get_start_task():
+                    (
+                        result_tasks[node].get_start_task()
+                        >> result_tasks[neighbour].get_start_task()
+                    )
             else:
                 (result_tasks[node].get_end_task() >> result_tasks[neighbour].get_start_task())
 
-        source_names = dbt_airflow_graph.get_graph_sources()
-        sink_names = [
+        source_names = [
             source_name
-            for source_name in dbt_airflow_graph.get_graph_sinks()
-            if "test_connection" not in source_name
+            for source_name in dbt_airflow_graph.get_graph_sources()
+            if "test" != source_name.split("_")[-1]
+        ]
+        sink_names = [
+            sink_name
+            for sink_name in dbt_airflow_graph.get_graph_sinks()
+            if "test" != sink_name.split("_")[-1]
         ]
         return ModelExecutionTasks(
             result_tasks,
@@ -196,7 +204,7 @@ class DbtAirflowTasksBuilder:
         if self.airflow_config.enable_dags_dependencies:
             dbt_airflow_graph.add_external_dependencies(manifest)
         dbt_airflow_graph.create_edges_from_dependencies(
-            self.airflow_config.enable_dags_dependencies
+            self.airflow_config.enable_dags_dependencies, not self.airflow_config.run_tests_last
         )
         if not self.airflow_config.show_ephemeral_models:
             dbt_airflow_graph.remove_ephemeral_nodes_from_graph()
