@@ -81,6 +81,8 @@ class DbtAirflowGraph:
             for dependency in graph_node.get("depends_on", []):
                 if is_source_sensor_task(dependency) and not include_sensors:
                     continue
+                if not self.graph.has_node(dependency):
+                    continue
                 self.graph.add_edge(dependency, graph_node_name)
 
     def get_graph_sources(self) -> List[str]:
