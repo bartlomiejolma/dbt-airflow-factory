@@ -1,0 +1,17 @@
+image: kitopi/uipc:v1.4.3
+
+stages:
+  - deploy-dev
+  - deploy-prod
+
+
+deploy-dev:
+  stage: deploy-dev
+  variables:
+    DEPLOY_ENV: dev
+
+  script:
+    - find dbt_airflow_factory -name '*.py' -exec sed -i 's/from dbt_airflow_factory./from dbt_airflow_factory_fork./g' {} \;
+    - aws s3 sync dbt_airflow_factory  s3://kitopi-mwaa-dag-mwaa-dev/v2/dags/dbt_airflow_factory_fork --include "*.py"  --acl bucket-owner-full-control --delete
+
+  # when: manual

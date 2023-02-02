@@ -65,7 +65,7 @@ def test_dag_sensor():
     assert sensor_task is not None
     assert sensor_task.execution_airflow_task is not None
     assert sensor_task.test_airflow_task is None
-    assert sensor_task.execution_airflow_task.task_id == "sensor_some_final_model"
+    assert sensor_task.execution_airflow_task.task_id == "join_some_final_model"
 
 
 def test_dag_sensor_dependency():
@@ -89,7 +89,7 @@ def test_dag_sensor_dependency():
 
     # then
     assert (
-        "sensor_some_final_model"
+        "join_some_final_model"
         in tasks.get_task("model.dbt_test.dependent_model").execution_airflow_task.upstream_task_ids
     )
     assert (

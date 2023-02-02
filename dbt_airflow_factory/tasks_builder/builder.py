@@ -6,6 +6,8 @@ from typing import Any, ContextManager, Dict, Tuple
 import airflow
 from airflow.models.baseoperator import BaseOperator
 from airflow.operators.dummy import DummyOperator
+from airflow.operators.python import BranchPythonOperator
+from airflow.utils.trigger_rule import TriggerRule
 from airflow.sensors.external_task_sensor import ExternalTaskSensor
 
 from dbt_airflow_factory.tasks_builder.node_type import NodeType
@@ -18,6 +20,19 @@ from dbt_airflow_factory.operator import DbtRunOperatorBuilder, EphemeralOperato
 from dbt_airflow_factory.tasks import ModelExecutionTask, ModelExecutionTasks
 from dbt_airflow_factory.tasks_builder.gateway import TaskGraphConfiguration
 from dbt_airflow_factory.tasks_builder.graph import DbtAirflowGraph
+from dbt_airflow_factory.tasks_builder.utils import is_source_sensor_task
+
+
+def branch_func_wrapper(skip_sensor: str, with_sensor: str):
+    def branch_func(**kwargs):
+        run_id = kwargs["run_id"]
+        is_manual = run_id.startswith("manual__")
+        if is_manual:
+            return skip_sensor
+        else:
+            return with_sensor
+
+    return branch_func
 
 
 class DbtAirflowTasksBuilder:
@@ -178,6 +193,7 @@ class DbtAirflowTasksBuilder:
             source_name
             for source_name in dbt_airflow_graph.get_graph_sources()
             if "test" != source_name.split("_")[-1]
+            and not is_source_sensor_task(source_name)
         ]
         sink_names = [
             sink_name
@@ -212,19 +228,39 @@ class DbtAirflowTasksBuilder:
         return dbt_airflow_graph
 
     def _create_dag_sensor(self, node: Dict[str, Any]) -> ModelExecutionTask:
-        # todo move parameters to configuration
-        return ModelExecutionTask(
-            ExternalTaskSensor(
-                task_id="sensor_" + node["select"],
-                external_dag_id=node["dag"],
-                external_task_id=node["select"]
-                + (".test" if self.airflow_config.use_task_group else "_test"),
-                timeout=24 * 60 * 60,
-                allowed_states=["success"],
-                failed_states=["failed", "skipped"],
-                mode="reschedule",
-            )
+
+        skip_sensor_task_id = f"skip_sensor_{node['select']}"
+        with_sensor_task_id = f"with_sensor_{node['select']}"
+
+        branch_op = BranchPythonOperator(
+            task_id=f"branch_task_{node['select']}",
+            provide_context=True,
+            python_callable=branch_func_wrapper(skip_sensor_task_id, with_sensor_task_id),
         )
+        sensor = ExternalTaskSensor(
+            task_id=with_sensor_task_id,
+            external_dag_id=node["dag"],
+            external_task_id=node["select"]
+            + (".test" if self.airflow_config.use_task_group else "_test"),
+            timeout=24 * 60 * 60,
+            allowed_states=["success"],
+            failed_states=["failed", "skipped"],
+            mode="reschedule",
+            check_existence=True
+        )
+        skip_sensor = DummyOperator(
+            task_id=skip_sensor_task_id,
+        )
+        join_task_id = f"join_{node['select']}"
+
+        join = DummyOperator(
+            task_id=join_task_id,
+            trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS,
+        )
+        branch_op >> sensor >> join
+        branch_op >> skip_sensor >> join
+        # todo move parameters to configuration
+        return ModelExecutionTask(join)
 
     @staticmethod
     def _create_dummy_task(node: Dict[str, Any]) -> ModelExecutionTask:
