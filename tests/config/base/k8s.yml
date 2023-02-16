@@ -15,7 +15,7 @@ annotations:
 is_delete_operator_pod: True
 
 resources:
-  node_selectors:
+  node_selector:
     group: data-processing
   tolerations:
     - key: group

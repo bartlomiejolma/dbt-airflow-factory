@@ -19,8 +19,8 @@ class KubernetesExecutionParameters:
     :type namespace: str
     :param image_pull_policy: Specify a policy to cache or always pull an image.
     :type image_pull_policy: str
-    :param node_selectors: A dict containing a group of scheduling rules.
-    :type node_selectors: dict
+    :param node_selector: A dict containing a group of scheduling rules.
+    :type node_selector: dict
     :param tolerations: A list of Kubernetes tolerations.
     :type tolerations: list
     :param labels: labels to apply to the Pod. (templated)
@@ -53,7 +53,7 @@ class KubernetesExecutionParameters:
         image: str,
         namespace: str = "default",
         image_pull_policy: Optional[str] = None,
-        node_selectors: Optional[dict] = None,
+        node_selector: Optional[dict] = None,
         tolerations: Optional[list] = None,
         labels: Optional[dict] = None,
         limit: Optional[dict] = None,
@@ -72,7 +72,7 @@ class KubernetesExecutionParameters:
         self.namespace = namespace
         self.image = image
         self.image_pull_policy = image_pull_policy
-        self.node_selectors = node_selectors
+        self.node_selector = node_selector
         self.tolerations = tolerations
         self.labels = labels
         self._limit = limit

@@ -146,7 +146,7 @@ def test_should_properly_map_tasks_with_source():
     assert all_models_run_task.downstream_task_ids == {
         "my_first_dbt_model_test",
         "my_second_dbt_model_test",
-        'my_first_dbt_model_my_second_dbt_model_test',
+        "my_first_dbt_model_my_second_dbt_model_test",
     }
 
 

@@ -192,8 +192,7 @@ class DbtAirflowTasksBuilder:
         source_names = [
             source_name
             for source_name in dbt_airflow_graph.get_graph_sources()
-            if "test" != source_name.split("_")[-1]
-            and not is_source_sensor_task(source_name)
+            if "test" != source_name.split("_")[-1] and not is_source_sensor_task(source_name)
         ]
         sink_names = [
             sink_name
@@ -246,7 +245,7 @@ class DbtAirflowTasksBuilder:
             allowed_states=["success"],
             failed_states=["failed", "skipped"],
             mode="reschedule",
-            check_existence=True
+            check_existence=True,
         )
         skip_sensor = DummyOperator(
             task_id=skip_sensor_task_id,

@@ -19,7 +19,7 @@ def test_configuration():
     assert run_task.namespace == "apache-airflow"
     assert run_task.image == "123.gcr/dbt-platform-poc:123"
     if IS_FIRST_AIRFLOW_VERSION:
-        assert run_task.node_selectors == {"group": "data-processing"}
+        assert run_task.node_selector == {"group": "data-processing"}
         assert run_task.tolerations[0]["key"] == "group"
         assert run_task.tolerations[0]["operator"] == "Equal"
         assert run_task.tolerations[0]["value"] == "data-processing"

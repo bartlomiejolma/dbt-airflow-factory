@@ -90,7 +90,7 @@ class DbtAirflowTasksBuilderFactory:
             self.airflow_config.get("use_task_group", False),
             self.airflow_config.get("show_ephemeral_models", True),
             self.airflow_config.get("enable_project_dependencies", False),
-            self.airflow_config.get("run_tests_last", False)
+            self.airflow_config.get("run_tests_last", False),
         )
 
     def _create_operator_builder(

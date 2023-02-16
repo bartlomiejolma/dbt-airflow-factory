@@ -161,7 +161,7 @@ k8s.yml file
      - string
      -
      - Path to the k8s configuration available in Airflow
-   * - resources.node_selectors
+   * - resources.node_selector
      - dictionary
      -
      - See more details in Kubernetes documentation: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector
