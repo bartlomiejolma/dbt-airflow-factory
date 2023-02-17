@@ -107,6 +107,15 @@ class DbtAirflowTasksBuilder:
             model_name,
         )
 
+    def _make_dbt_source_sensor_task(self, source_name: str) -> BaseOperator:
+        command = "source freshness"
+        select_name = f"source:{source_name}"
+        return self.operator_builder.create(
+            self._build_task_name(source_name, command.replace(" ", "_")),
+            command,
+            select_name,
+        )
+
     @staticmethod
     def _build_task_name(model_name: str, command: str, is_in_task_group: bool) -> str:
         return command if is_in_task_group else f"{model_name}_{command}"
@@ -239,8 +248,7 @@ class DbtAirflowTasksBuilder:
         sensor = ExternalTaskSensor(
             task_id=with_sensor_task_id,
             external_dag_id=node["dag"],
-            external_task_id=node["select"]
-            + (".test" if self.airflow_config.use_task_group else "_test"),
+            external_task_id=node["select"],
             timeout=24 * 60 * 60,
             allowed_states=["success"],
             failed_states=["failed", "skipped"],
@@ -252,7 +260,9 @@ class DbtAirflowTasksBuilder:
         )
         join_task_id = f"join_{node['select']}"
 
-        join = DummyOperator(
+        join = self._make_dbt_source_sensor_task(node["select"])
+
+        DummyOperator(
             task_id=join_task_id,
             trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS,
         )
