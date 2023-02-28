@@ -62,12 +62,26 @@ class DbtAirflowGraph:
                     ),
                 )
 
+    def _is_freshness_configured(self, node: dict) -> bool:
+        freshness = node.get("freshness", {})
+        warn_after = freshness.get("warn_after", {})
+        warn_after_count = warn_after.get("count")
+        error_after = freshness.get("error_after", {})
+        error_after_count = error_after.get("count")
+        return warn_after_count or error_after_count
+
     def add_external_dependencies(self, manifest: dict) -> None:
         manifest_child_map = manifest["child_map"]
         for source_name, manifest_source in manifest["sources"].items():
             if "dag" in manifest_source["source_meta"] and len(manifest_child_map[source_name]) > 0:
                 logging.info("Creating source sensor for: " + source_name)
                 self._add_sensor_source_node(source_name, manifest_source)
+            if (
+                self._is_freshness_configured(manifest_source)
+                and len(manifest_child_map[source_name]) > 0
+            ):
+                logging.info("Creating source freshness for: " + source_name)
+                self._add_freshness_source_node(source_name, manifest_source)
 
     def create_edges_from_dependencies(
         self, include_sensors: bool = False, include_contract_tests_dependencies: bool = True
@@ -88,8 +102,9 @@ class DbtAirflowGraph:
     def get_graph_sources(self) -> List[str]:
         return [
             node_name
-            for node_name in self.graph.nodes()
+            for node_name, node_data in self.graph.nodes.items()
             if len(list(self.graph.predecessors(node_name))) == 0
+            and node_data['node_type'] != NodeType.SOURCE_SENSOR
         ]
 
     def get_graph_sinks(self) -> List[str]:
@@ -134,7 +149,16 @@ class DbtAirflowGraph:
             node_name,
             select=manifest_node["name"],
             dag=manifest_node["source_meta"]["dag"],
+            source_name=manifest_node["source_name"],
             node_type=NodeType.SOURCE_SENSOR,
+        )
+
+    def _add_freshness_source_node(self, node_name: str, manifest_node: Dict[str, Any]) -> None:
+        self.graph.add_node(
+            f"{node_name}_freshness",
+            select=manifest_node["name"],
+            source_name=manifest_node["source_name"],
+            node_type=NodeType.SOURCE_FRESHNESS,
         )
 
     def _add_gateway_node(self, manifest: dict, separation_layer: SeparationLayer) -> None:

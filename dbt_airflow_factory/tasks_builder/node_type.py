@@ -7,3 +7,4 @@ class NodeType(Enum):
     EPHEMERAL = 3
     SOURCE_SENSOR = 4
     MOCK_GATEWAY = 5
+    SOURCE_FRESHNESS = 6

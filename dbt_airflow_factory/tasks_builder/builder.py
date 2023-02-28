@@ -107,6 +107,15 @@ class DbtAirflowTasksBuilder:
             model_name,
         )
 
+    def _make_dbt_source_freshness_task(self, source_name: str) -> BaseOperator:
+        command = "source freshness"
+        select_name = f"source:{source_name}"
+        return self.operator_builder.create(
+            self._build_task_name(source_name, command.replace(" ", "_"), False),
+            command,
+            select_name,
+        )
+
     @staticmethod
     def _build_task_name(model_name: str, command: str, is_in_task_group: bool) -> str:
         return command if is_in_task_group else f"{model_name}_{command}"
@@ -152,6 +161,8 @@ class DbtAirflowTasksBuilder:
             return self._multiple_deps_test_model_execution_task(node_name, node)
         elif node["node_type"] == NodeType.SOURCE_SENSOR:
             return self._create_dag_sensor(node)
+        elif node["node_type"] == NodeType.SOURCE_FRESHNESS:
+            return self._create_source_freshness_check(node)
         elif node["node_type"] == NodeType.MOCK_GATEWAY:
             return self._create_dummy_task(node)
         else:
@@ -181,7 +192,7 @@ class DbtAirflowTasksBuilder:
         for node, neighbour in dbt_airflow_graph.graph.edges():
             # noinspection PyStatementEffect
             if self.airflow_config.run_tests_last:
-                if result_tasks[neighbour].get_start_task():
+                if result_tasks[neighbour].get_start_task() and result_tasks[node].get_start_task():
                     (
                         result_tasks[node].get_start_task()
                         >> result_tasks[neighbour].get_start_task()
@@ -197,7 +208,7 @@ class DbtAirflowTasksBuilder:
         sink_names = [
             sink_name
             for sink_name in dbt_airflow_graph.get_graph_sinks()
-            if "test" != sink_name.split("_")[-1]
+            if "test" != sink_name.split("_")[-1] and "freshness" != sink_name.split("_")[-1]
         ]
         return ModelExecutionTasks(
             result_tasks,
@@ -240,7 +251,7 @@ class DbtAirflowTasksBuilder:
             task_id=with_sensor_task_id,
             external_dag_id=node["dag"],
             external_task_id=node["select"]
-            + (".test" if self.airflow_config.use_task_group else "_test"),
+            + (".run" if self.airflow_config.use_task_group else "_run"),
             timeout=24 * 60 * 60,
             allowed_states=["success"],
             failed_states=["failed", "skipped"],
@@ -256,10 +267,27 @@ class DbtAirflowTasksBuilder:
             task_id=join_task_id,
             trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS,
         )
+
         branch_op >> sensor >> join
         branch_op >> skip_sensor >> join
         # todo move parameters to configuration
         return ModelExecutionTask(join)
+
+    def _create_source_freshness_check(self, node: Dict[str, Any]) -> ModelExecutionTask:
+        source_name = f"{node['source_name']}.{node['select']}"
+        freshness = self._make_dbt_source_freshness_task(source_name)
+
+        # todo move parameters to configuration
+        if self.airflow_config.run_tests_last:
+            return ModelExecutionTask(
+                None,
+                freshness,
+            )
+        else:
+            return ModelExecutionTask(
+                freshness,
+                None,
+            )
 
     @staticmethod
     def _create_dummy_task(node: Dict[str, Any]) -> ModelExecutionTask:

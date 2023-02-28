@@ -23,8 +23,16 @@ def test_notification_callback_creation():
     assert dag.default_args["on_failure_callback"]
 
 
-@patch("airflow.hooks.base_hook.BaseHook.get_connection")
-@patch("airflow.contrib.operators.slack_webhook_operator.SlackWebhookOperator.__new__")
+if airflow.__version__.startswith("1."):
+    operator_path = "airflow.contrib.operators.slack_webhook_operator.SlackWebhookOperator.__new__"
+    connection_path = "airflow.hooks.base_hook.BaseHook.get_connection"
+else:
+    operator_path = "airflow.providers.slack.operators.slack_webhook.SlackWebhookOperator.__new__"
+    connection_path = "airflow.hooks.base.BaseHook.get_connection"
+
+
+@patch(connection_path)
+@patch(operator_path)
 def test_notification_send(mock_operator_init, mock_get_connection):
     # given
     notifications_config = AirflowDagFactory(
