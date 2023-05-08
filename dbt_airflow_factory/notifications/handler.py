@@ -27,6 +27,7 @@ class NotificationHandlersFactory:
                         http_conn_id=handler_definition["connection_id"],
                         webhook_token=connection.password,
                         username=connection.login,
+                        channel=handler_definition.get("channel", None)
                     ).execute(context=context)
 
         return failure_handler
