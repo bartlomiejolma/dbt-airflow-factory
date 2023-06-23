@@ -17,7 +17,7 @@ def test_notification_callback_creation():
     factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "notifications")
 
     # when
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # then
     assert dag.default_args["on_failure_callback"]

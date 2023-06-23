@@ -14,10 +14,10 @@ def test_dag_factory():
     factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "dev")
 
     # when
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # then
-    assert dag.dag_id == "dbt-platform-poc"
+    assert dag.dag_id == "dbt-platform-poc_0_12_x_x_x"
     assert dag.description == "Experimental snadbox data platform DAG"
     assert dag.schedule_interval == "0 12 * * *"
     assert not dag.catchup
@@ -42,7 +42,7 @@ def test_task_group_dag_factory():
     factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "task_group")
 
     # when
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # then
     assert len(dag.tasks) == 10
@@ -57,7 +57,7 @@ def test_no_task_group_dag_factory():
     factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "no_task_group")
 
     # when
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # then
     assert len(dag.tasks) == 10
@@ -69,7 +69,7 @@ def test_gateway_dag_factory():
     factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "gateway")
 
     # when
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # then save points should be as passed in the config file
     assert dag.tasks.__len__() == 15
@@ -81,7 +81,7 @@ def test_should_not_fail_when_savepoint_property_wasnt_passed():
     factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "no_gateway")
 
     # when
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # then save_points_property should be empty
     assert factory.airflow_config.get("save_points", []).__len__() == 0
@@ -95,7 +95,7 @@ def test_should_properly_map_tasks():
     factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "gateway")
 
     # when
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # then save_points_property should be empty
     save_points = factory.airflow_config.get("save_points")
@@ -119,7 +119,7 @@ def test_should_properly_map_tasks_with_source():
     factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "gateway_source")
 
     # when
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # then save_points_property should be empty
     save_points = factory.airflow_config.get("save_points")
@@ -194,7 +194,7 @@ def test_should_add_airbyte_tasks_when_seed_is_not_available(
     )
 
     # when creating factory
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # airbyte ingestion tasks should be added to dummy task
     start_task_name = [

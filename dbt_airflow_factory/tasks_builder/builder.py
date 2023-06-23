@@ -1,12 +1,15 @@
 """Class parsing ``manifest.json`` into Airflow tasks."""
 import json
 import logging
-from typing import Any, ContextManager, Dict, Tuple
+from typing import Any, ContextManager, Dict, Tuple, Optional
 
 import airflow
 from airflow.models.baseoperator import BaseOperator
+
+from airflow.models import DagBag
+from airflow.exceptions import DagNotFound
 from airflow.operators.dummy import DummyOperator
-from airflow.operators.python import BranchPythonOperator
+from airflow.operators.python import BranchPythonOperator, PythonOperator
 from airflow.utils.trigger_rule import TriggerRule
 from airflow.sensors.external_task_sensor import ExternalTaskSensor
 
@@ -23,14 +26,29 @@ from dbt_airflow_factory.tasks_builder.graph import DbtAirflowGraph
 from dbt_airflow_factory.tasks_builder.utils import is_source_sensor_task
 
 
-def branch_func_wrapper(skip_sensor: str, with_sensor: str):
+from typing import List
+
+
+def branch_func_wrapper(
+    skip_sensor: str, with_sensor: str, dag_id: str, can_skip_sensor: Optional[bool] = False
+):
     def branch_func(**kwargs):
         run_id = kwargs["run_id"]
         is_manual = run_id.startswith("manual__")
+
         if is_manual:
             return skip_sensor
-        else:
+        if not can_skip_sensor:
             return with_sensor
+
+        dag_bag = DagBag()
+        get_dag = dag_bag.get_dag(dag_id)
+        logging.info(f"get_dag for {dag_id} returns {get_dag}")
+        dag_exists = dag_bag.get_dag(dag_id) is not None
+        if not dag_exists:
+            return skip_sensor
+
+        return with_sensor
 
     return branch_func
 
@@ -57,7 +75,9 @@ class DbtAirflowTasksBuilder:
         self.airflow_config = airflow_config
         self.gateway_config = gateway_config
 
-    def parse_manifest_into_tasks(self, manifest_path: str) -> ModelExecutionTasks:
+    def parse_manifest_into_tasks(
+        self, manifest_path: str, tags: List[str] = None, schedule: str = ""
+    ) -> ModelExecutionTasks:
         """
         Parse ``manifest.json`` into tasks.
 
@@ -66,7 +86,7 @@ class DbtAirflowTasksBuilder:
         :return: Dictionary of tasks created from ``manifest.json`` parsing.
         :rtype: ModelExecutionTasks
         """
-        return self._make_dbt_tasks(manifest_path)
+        return self._make_dbt_tasks(manifest_path, tags, schedule)
 
     def create_seed_task(self) -> BaseOperator:
         """
@@ -134,10 +154,7 @@ class DbtAirflowTasksBuilder:
         return task_group, task_group_ctx
 
     def _create_task_for_model(
-        self,
-        model_name: str,
-        is_ephemeral_task: bool,
-        use_task_group: bool,
+        self, model_name: str, is_ephemeral_task: bool, use_task_group: bool, with_tests: bool
     ) -> ModelExecutionTask:
         if is_ephemeral_task:
             return ModelExecutionTask(EphemeralOperator(task_id=f"{model_name}__ephemeral"), None)
@@ -146,7 +163,9 @@ class DbtAirflowTasksBuilder:
         is_in_task_group = task_group is not None
         with task_group_ctx:
             run_task = self._make_dbt_run_task(model_name, is_in_task_group)
-            test_task = self._make_dbt_test_task(model_name, is_in_task_group)
+            test_task = (
+                self._make_dbt_test_task(model_name, is_in_task_group) if with_tests else None
+            )
             if not self.airflow_config.run_tests_last:
                 # noinspection PyStatementEffect
                 run_task >> test_task
@@ -170,6 +189,7 @@ class DbtAirflowTasksBuilder:
                 node["select"],
                 node["node_type"] == NodeType.EPHEMERAL,
                 self.airflow_config.use_task_group,
+                with_tests=node["with_tests"],
             )
 
     def _multiple_deps_test_model_execution_task(self, node_name: str, node: Dict[str, Any]):
@@ -216,19 +236,23 @@ class DbtAirflowTasksBuilder:
             sink_names,
         )
 
-    def _make_dbt_tasks(self, manifest_path: str) -> ModelExecutionTasks:
+    def _make_dbt_tasks(
+        self, manifest_path: str, tags: List[str], schedule: str
+    ) -> ModelExecutionTasks:
         manifest = self._load_dbt_manifest(manifest_path)
-        dbt_airflow_graph = self._create_tasks_graph(manifest)
+        dbt_airflow_graph = self._create_tasks_graph(manifest, tags, schedule)
         tasks_with_context = self._create_tasks_from_graph(dbt_airflow_graph)
         logging.info(f"Created {str(tasks_with_context.length())} tasks groups")
         return tasks_with_context
 
-    def _create_tasks_graph(self, manifest: dict) -> DbtAirflowGraph:
+    def _create_tasks_graph(
+        self, manifest: dict, tags: Optional[List[str]], schedule: str
+    ) -> DbtAirflowGraph:
 
         dbt_airflow_graph = DbtAirflowGraph(self.gateway_config)
-        dbt_airflow_graph.add_execution_tasks(manifest)
+        dbt_airflow_graph.add_execution_tasks(manifest, tags)
         if self.airflow_config.enable_dags_dependencies:
-            dbt_airflow_graph.add_external_dependencies(manifest)
+            dbt_airflow_graph.add_external_dependencies(manifest, schedule, tags)
         dbt_airflow_graph.create_edges_from_dependencies(
             self.airflow_config.enable_dags_dependencies, not self.airflow_config.run_tests_last
         )
@@ -239,33 +263,44 @@ class DbtAirflowTasksBuilder:
 
     def _create_dag_sensor(self, node: Dict[str, Any]) -> ModelExecutionTask:
 
-        skip_sensor_task_id = f"skip_sensor_{node['select']}"
-        with_sensor_task_id = f"with_sensor_{node['select']}"
+        task_full_name = f"{node['dag']}_{node['select']}"
+        skip_sensor_task_id = f"skip_sensor_{task_full_name}"
+        with_sensor_task_id = f"with_sensor_{task_full_name}"
 
         branch_op = BranchPythonOperator(
-            task_id=f"branch_task_{node['select']}",
+            task_id=f"branch_task_{task_full_name}",
             provide_context=True,
-            python_callable=branch_func_wrapper(skip_sensor_task_id, with_sensor_task_id),
+            python_callable=branch_func_wrapper(
+                skip_sensor_task_id,
+                with_sensor_task_id,
+                node["dag"],
+                node.get("can_skip_sensor", True),
+            ),
         )
+
         sensor = ExternalTaskSensor(
             task_id=with_sensor_task_id,
             external_dag_id=node["dag"],
             external_task_id=node["select"]
             + (".run" if self.airflow_config.use_task_group else "_run"),
-            timeout=24 * 60 * 60,
+            timeout=3 * 60 * 60,
             allowed_states=["success"],
             failed_states=["failed", "skipped"],
             mode="reschedule",
+            poke_interval=60,
             check_existence=True,
         )
+
         skip_sensor = DummyOperator(
             task_id=skip_sensor_task_id,
         )
-        join_task_id = f"join_{node['select']}"
+        join_task_id = f"join_{task_full_name}"
 
         join = DummyOperator(
             task_id=join_task_id,
-            trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS,
+            trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS
+            if node.get("can_skip_sensor", True)
+            else TriggerRule.NONE_FAILED,
         )
 
         branch_op >> sensor >> join

@@ -12,10 +12,10 @@ default_args:
 
 
 dag:
-  dag_id: dbt-platform-poc
-  description: 'Experimental snadbox data platform DAG'
-  schedule_interval: '0 12 * * *'
-  catchup: False
+  - dag_id: dbt-platform-poc
+    description: 'Experimental snadbox data platform DAG'
+    schedule_interval: '0 12 * * *'
+    catchup: False
 
 seed_task: True
 manifest_file_name: ../tests/manifest.json

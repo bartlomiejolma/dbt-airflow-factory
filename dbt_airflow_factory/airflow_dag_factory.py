@@ -20,6 +20,9 @@ from dbt_airflow_factory.config_utils import read_config, read_env_config
 from dbt_airflow_factory.notifications.handler import NotificationHandlersFactory
 from dbt_airflow_factory.tasks_builder.builder import DbtAirflowTasksBuilder
 from dbt_airflow_factory.tasks import ModelExecutionTasks
+from dbt_airflow_factory.tasks_builder.utils import generate_dag_id
+
+from typing import List, Dict
 
 
 class AirflowDagFactory:
@@ -82,20 +85,29 @@ class AirflowDagFactory:
             ),
         )
 
-    def create(self) -> DAG:
+    def create(self) -> List[DAG]:
         """
         Parse ``manifest.json`` and create tasks based on the data contained there.
 
         :return: Generated DAG.
         :rtype: airflow.models.dag.DAG
         """
-        with DAG(
-            default_args=self.airflow_config["default_args"], **self.airflow_config["dag"]
-        ) as dag:
-            self.create_tasks()
-        return dag
+        dags = []
+        dags_config = (
+            self.airflow_config["dag"]
+            if type(self.airflow_config["dag"]) is list
+            else [self.airflow_config["dag"]]
+        )
+        for dag_properties in dags_config:
+            dag_properties["dag_id"] = generate_dag_id(dag_properties)
+            with DAG(default_args=self.airflow_config["default_args"], **dag_properties) as dag:
+                self.create_tasks(
+                    dag_properties.get("schedule_interval"), dag_properties.get("tags")
+                )
+                dags.append(dag)
+        return dags
 
-    def create_tasks(self) -> None:
+    def create_tasks(self, schedule: str = "", tags: List[str] = None) -> None:
         """
         Parse ``manifest.json`` and create tasks based on the data contained there.
         """
@@ -107,7 +119,7 @@ class AirflowDagFactory:
             builder = self.ingestion_tasks_builder_factory.create()
             ingestion_tasks = builder.build()
             ingestion_tasks >> start
-        tasks = self._builder.parse_manifest_into_tasks(self._manifest_file_path())
+        tasks = self._builder.parse_manifest_into_tasks(self._manifest_file_path(), tags, schedule)
         for starting_task in tasks.get_starting_tasks():
             start >> starting_task.get_start_task()
         self._add_ending_task_with_dependencies(tasks)

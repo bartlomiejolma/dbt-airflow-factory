@@ -1,6 +1,6 @@
 import itertools
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 import networkx as nx
 
@@ -20,6 +20,8 @@ from dbt_airflow_factory.tasks_builder.utils import (
     is_model_run_task,
     is_source_sensor_task,
     is_test_task,
+    does_model_have_appropriate_tags,
+    generate_dag_id,
 )
 
 
@@ -33,20 +35,24 @@ class DbtAirflowGraph:
         self.graph = nx.DiGraph()
         self.configuration = configuration
 
-    def add_execution_tasks(self, manifest: dict) -> None:
+    def add_execution_tasks(self, manifest: dict, tags: List[str] = None) -> None:
         self._add_gateway_execution_tasks(manifest=manifest)
 
         for node_name, manifest_node in manifest["nodes"].items():
+            if not does_model_have_appropriate_tags(manifest_node, tags):
+                continue
             if is_model_run_task(node_name):
                 logging.info("Creating tasks for: " + node_name)
-                self._add_graph_node_for_model_run_task(node_name, manifest_node, manifest)
+                self._add_graph_node_for_model_run_task(node_name, manifest_node, manifest, tags)
             elif (
                 is_test_task(node_name)
                 and len(self._get_model_dependencies_from_manifest_node(manifest_node, manifest))
                 > 1
             ):
                 logging.info("Creating tasks for: " + node_name)
-                self._add_graph_node_for_multiple_deps_test(node_name, manifest_node, manifest)
+                self._add_graph_node_for_multiple_deps_test(
+                    node_name, manifest_node, manifest, tags
+                )
 
     def _add_gateway_execution_tasks(self, manifest: dict) -> None:
         if self.configuration.gateway.separation_schemas.__len__() >= 2:
@@ -70,12 +76,16 @@ class DbtAirflowGraph:
         error_after_count = error_after.get("count")
         return warn_after_count or error_after_count
 
-    def add_external_dependencies(self, manifest: dict) -> None:
+    def add_external_dependencies(
+        self, manifest: dict, schedule: str, tags: Optional[List[str]] = None
+    ) -> None:
         manifest_child_map = manifest["child_map"]
         for source_name, manifest_source in manifest["sources"].items():
-            if "dag" in manifest_source["source_meta"] and len(manifest_child_map[source_name]) > 0:
+            if "dag" in manifest_source["source_meta"] and set(
+                manifest_child_map[source_name]
+            ).intersection(set(self.graph.nodes.keys())):
                 logging.info("Creating source sensor for: " + source_name)
-                self._add_sensor_source_node(source_name, manifest_source)
+                self._add_sensor_source_node(source_name, manifest_source, schedule, tags)
             if (
                 self._is_freshness_configured(manifest_source)
                 and len(manifest_child_map[source_name]) > 0
@@ -104,7 +114,7 @@ class DbtAirflowGraph:
             node_name
             for node_name, node_data in self.graph.nodes.items()
             if len(list(self.graph.predecessors(node_name))) == 0
-            and node_data['node_type'] != NodeType.SOURCE_SENSOR
+            and node_data["node_type"] != NodeType.SOURCE_SENSOR
         ]
 
     def get_graph_sinks(self) -> List[str]:
@@ -135,22 +145,40 @@ class DbtAirflowGraph:
             self._contract_test_nodes_same_deps(depends_on_tuple, test_node_names)
 
     def _add_execution_graph_node(
-        self, node_name: str, manifest_node: Dict[str, Any], node_type: NodeType, manifest: dict
+        self,
+        node_name: str,
+        manifest_node: Dict[str, Any],
+        node_type: NodeType,
+        manifest: dict,
+        tags: Optional[List[str]],
     ) -> None:
         self.graph.add_node(
             node_name,
             select=manifest_node["name"],
             depends_on=self._get_model_dependencies_from_manifest_node(manifest_node, manifest),
             node_type=node_type,
+            with_tests=tags is None,
         )
 
-    def _add_sensor_source_node(self, node_name: str, manifest_node: Dict[str, Any]) -> None:
+    def _add_sensor_source_node(
+        self,
+        node_name: str,
+        manifest_node: Dict[str, Any],
+        schedule: str,
+        tags: Optional[List[str]],
+    ) -> None:
+        upstream_properties = {
+            "dag_id": manifest_node["source_meta"]["dag"],
+            "schedule_interval": schedule,
+        }
+        dag_id = generate_dag_id(upstream_properties)
         self.graph.add_node(
             node_name,
             select=manifest_node["name"],
-            dag=manifest_node["source_meta"]["dag"],
+            dag=dag_id,
             source_name=manifest_node["source_name"],
             node_type=NodeType.SOURCE_SENSOR,
+            can_skip_sensor=tags is not None,
         )
 
     def _add_freshness_source_node(self, node_name: str, manifest_node: Dict[str, Any]) -> None:
@@ -176,20 +204,29 @@ class DbtAirflowGraph:
         )
 
     def _add_graph_node_for_model_run_task(
-        self, node_name: str, manifest_node: Dict[str, Any], manifest: dict
+        self,
+        node_name: str,
+        manifest_node: Dict[str, Any],
+        manifest: dict,
+        tags: Optional[List[str]],
     ) -> None:
         self._add_execution_graph_node(
             node_name,
             manifest_node,
             NodeType.EPHEMERAL if is_ephemeral_task(manifest_node) else NodeType.RUN_TEST,
             manifest,
+            tags,
         )
 
     def _add_graph_node_for_multiple_deps_test(
-        self, node_name: str, manifest_node: Dict[str, Any], manifest: dict
+        self,
+        node_name: str,
+        manifest_node: Dict[str, Any],
+        manifest: dict,
+        tags: Optional[List[str]],
     ) -> None:
         self._add_execution_graph_node(
-            node_name, manifest_node, NodeType.MULTIPLE_DEPS_TEST, manifest
+            node_name, manifest_node, NodeType.MULTIPLE_DEPS_TEST, manifest, tags
         )
 
     def _get_test_with_multiple_deps_names_by_deps(

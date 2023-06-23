@@ -14,7 +14,7 @@ def test_ephemeral_dag_factory():
     factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "ephemeral_operator")
 
     # when
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # then
     assert len(dag.tasks) == 16
@@ -51,7 +51,7 @@ def test_no_ephemeral_dag_factory():
     factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "no_ephemeral_operator")
 
     # when
-    dag = factory.create()
+    dag = factory.create()[0]
 
     # then
     assert len(dag.tasks) == 8
