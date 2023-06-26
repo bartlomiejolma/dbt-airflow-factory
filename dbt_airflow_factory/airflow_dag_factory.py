@@ -1,6 +1,7 @@
 """Factory creating Airflow DAG."""
 
 import os
+from datetime import timedelta
 
 import airflow
 from airflow import DAG
@@ -13,16 +14,16 @@ if airflow.__version__.startswith("1."):
 else:
     from airflow.operators.dummy import DummyOperator
 
+from typing import Dict, List
+
 from pytimeparse import parse
 
 from dbt_airflow_factory.builder_factory import DbtAirflowTasksBuilderFactory
 from dbt_airflow_factory.config_utils import read_config, read_env_config
 from dbt_airflow_factory.notifications.handler import NotificationHandlersFactory
-from dbt_airflow_factory.tasks_builder.builder import DbtAirflowTasksBuilder
 from dbt_airflow_factory.tasks import ModelExecutionTasks
+from dbt_airflow_factory.tasks_builder.builder import DbtAirflowTasksBuilder
 from dbt_airflow_factory.tasks_builder.utils import generate_dag_id
-
-from typing import List, Dict
 
 
 class AirflowDagFactory:
@@ -99,6 +100,11 @@ class AirflowDagFactory:
             else [self.airflow_config["dag"]]
         )
         for dag_properties in dags_config:
+            dag_properties['dagrun_timeout'] = (
+                timedelta(**dag_properties['dagrun_timeout'])
+                if 'dagrun_timeout' in dag_properties
+                else None
+            ) 
             dag_properties["dag_id"] = generate_dag_id(dag_properties)
             with DAG(default_args=self.airflow_config["default_args"], **dag_properties) as dag:
                 self.create_tasks(
