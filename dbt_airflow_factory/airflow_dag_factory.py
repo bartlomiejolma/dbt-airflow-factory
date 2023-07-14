@@ -1,7 +1,7 @@
 """Factory creating Airflow DAG."""
 
 import os
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 import airflow
 from airflow import DAG
@@ -13,6 +13,10 @@ if airflow.__version__.startswith("1."):
     from airflow.operators.dummy_operator import DummyOperator
 else:
     from airflow.operators.dummy import DummyOperator
+from airflow.operators.python import ShortCircuitOperator
+from airflow.models.dagrun import DagRun
+from airflow.utils.state import DagRunState
+from airflow.models.dagbag import DagBag
 
 from typing import Dict, List
 
@@ -99,32 +103,48 @@ class AirflowDagFactory:
             if type(self.airflow_config["dag"]) is list
             else [self.airflow_config["dag"]]
         )
-        for dag_properties in dags_config:
-            dag_properties['dagrun_timeout'] = (
-                timedelta(**dag_properties['dagrun_timeout'])
-                if 'dagrun_timeout' in dag_properties
+        for dag_index, dag_properties in enumerate(dags_config):
+            dag_properties["dagrun_timeout"] = (
+                timedelta(**dag_properties["dagrun_timeout"])
+                if "dagrun_timeout" in dag_properties
                 else None
-            ) 
+            )
+            higher_priority_dag_ids = [
+                higher_dags_properties["dag_id"]
+                for higher_dags_properties in dags_config[0:dag_index]
+            ]
             dag_properties["dag_id"] = generate_dag_id(dag_properties)
             with DAG(default_args=self.airflow_config["default_args"], **dag_properties) as dag:
                 self.create_tasks(
-                    dag_properties.get("schedule_interval"), dag_properties.get("tags")
+                    dag_properties.get("schedule_interval"),
+                    dag_properties.get("tags"),
+                    higher_priority_dag_ids,
                 )
                 dags.append(dag)
         return dags
 
-    def create_tasks(self, schedule: str = "", tags: List[str] = None) -> None:
+    def create_tasks(
+        self, schedule: str = "", tags: List[str] = None, higher_priority_dag_ids: List[str] = None
+    ) -> None:
         """
         Parse ``manifest.json`` and create tasks based on the data contained there.
         """
 
         ingestion_enabled = self.ingestion_config.get("enable", False)
-
         start = self._create_starting_task()
+
         if ingestion_enabled and self.ingestion_tasks_builder_factory:
             builder = self.ingestion_tasks_builder_factory.create()
             ingestion_tasks = builder.build()
             ingestion_tasks >> start
+
+        if higher_priority_dag_ids:
+
+            condition_check = self._create_condition_check(higher_priority_dag_ids)
+            condition_check >> start
+            if ingestion_enabled and self.ingestion_tasks_builder_factory:
+                condition_check >> ingestion_tasks
+
         tasks = self._builder.parse_manifest_into_tasks(self._manifest_file_path(), tags, schedule)
         for starting_task in tasks.get_starting_tasks():
             start >> starting_task.get_start_task()
@@ -173,3 +193,44 @@ class AirflowDagFactory:
                 config["failure_handlers"]
             )
         return config
+
+    def _create_condition_check(self, higher_priority_dag_ids: List[str]) -> BaseOperator:
+        def check_if_any_dags_are_active(higher_priority_dag_ids: List[str]) -> bool:
+            dag_runs_running = DagRun.find(higher_priority_dag_ids, state=DagRunState.RUNNING)
+            dag_runs_queued = DagRun.find(higher_priority_dag_ids, state=DagRunState.QUEUED)
+            dag_runs = dag_runs_running + dag_runs_queued
+            print(dag_runs)
+
+            return len(dag_runs) > 0
+
+        def check_if_any_scheduled(higher_priority_dag_ids: List[str]) -> bool:
+            time_difference = timedelta(minutes=15)
+            bag = DagBag(collect_dags=False)
+            if not bag:
+                return False
+            for dag_name in higher_priority_dag_ids:
+                future_dag = bag.get_dag(dag_name)
+                current_dagrun_info = future_dag.next_dagrun_info(None)
+
+                print(current_dagrun_info.data_interval)
+                next_dagrun_info = future_dag.next_dagrun_info(current_dagrun_info.data_interval)
+                print(next_dagrun_info.data_interval)
+
+                if (
+                    next_dagrun_info.data_interval.end
+                    < datetime.now(next_dagrun_info.data_interval.end.tzinfo) + time_difference
+                ):
+                    return True
+            return False
+
+        def check_condition():
+
+            return not (
+                check_if_any_dags_are_active(higher_priority_dag_ids)
+                or check_if_any_scheduled(higher_priority_dag_ids)
+            )
+
+        condition_check = ShortCircuitOperator(
+            task_id="condition_check", python_callable=check_condition
+        )
+        return condition_check

@@ -68,7 +68,7 @@ def test_dag_sensor():
     assert sensor_task is not None
     assert sensor_task.execution_airflow_task is not None
     assert sensor_task.test_airflow_task is None
-    assert sensor_task.execution_airflow_task.task_id == "upstream_pipeline_sources.some_final_model_source_freshness"
+    assert sensor_task.execution_airflow_task.task_id == "join_dbt-tpch-test__some_final_model"
 
 
 def test_dag_sensor_dependency():
@@ -92,7 +92,7 @@ def test_dag_sensor_dependency():
 
     # then
     assert (
-        "upstream_pipeline_sources.some_final_model_source_freshness"
+        "join_dbt-tpch-test__some_final_model"
         in tasks.get_task("model.dbt_test.dependent_model").execution_airflow_task.upstream_task_ids
     )
     assert (
@@ -109,7 +109,7 @@ def test_dag_sensor_no_meta():
         {
             "model.dbt_test.dependent_model": [
                 "source.upstream_pipeline_sources.upstream_pipeline.some_final_model",
-                "source.upstream_pipeline_sources.upstream_pipeline.no_dag"
+                "source.upstream_pipeline_sources.upstream_pipeline.no_dag",
             ]
         },
         extra_metadata_data,
