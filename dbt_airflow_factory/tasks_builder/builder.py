@@ -41,7 +41,7 @@ def branch_func_wrapper(
         if not can_skip_sensor:
             return with_sensor
 
-        dag_bag = DagBag()
+        dag_bag = DagBag(collect_dags=False, read_dags_from_db=True)
         get_dag = dag_bag.get_dag(dag_id)
         logging.info(f"get_dag for {dag_id} returns {get_dag}")
         dag_exists = dag_bag.get_dag(dag_id) is not None

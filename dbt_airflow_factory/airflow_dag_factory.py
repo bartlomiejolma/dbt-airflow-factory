@@ -205,7 +205,7 @@ class AirflowDagFactory:
 
         def check_if_any_scheduled(higher_priority_dag_ids: List[str]) -> bool:
             time_difference = timedelta(minutes=15)
-            bag = DagBag(collect_dags=False)
+            bag = DagBag(collect_dags=False, read_dags_from_db=True)
             if not bag:
                 return False
             for dag_name in higher_priority_dag_ids:
