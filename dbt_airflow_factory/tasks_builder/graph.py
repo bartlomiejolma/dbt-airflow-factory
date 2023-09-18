@@ -70,6 +70,8 @@ class DbtAirflowGraph:
 
     def _is_freshness_configured(self, node: dict) -> bool:
         freshness = node.get("freshness", {})
+        if not freshness:
+            return False
         warn_after = freshness.get("warn_after", {})
         warn_after_count = warn_after.get("count")
         error_after = freshness.get("error_after", {})
