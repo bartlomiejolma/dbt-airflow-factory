@@ -1,3 +1,4 @@
+from datetime import timedelta
 from enum import Enum
 from typing import List
 
@@ -35,6 +36,10 @@ class AirbyteIngestionTasksBuilder(IngestionTasksBuilder):
                     api_version=task["api_version"],
                     wait_seconds=task["wait_seconds"],
                     timeout=task["timeout"],
+                    retries=task.get("retries", 1),  # Default to 1 retries if not provided
+                    retry_delay=timedelta(
+                        seconds=task.get("retry_delay_seconds", 600)
+                    ),  # Default to 600 seconds (10 minutes) if not provided
                 )
             )
 
