@@ -1,6 +1,6 @@
 import itertools
 import logging
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import networkx as nx
 
@@ -16,12 +16,12 @@ from dbt_airflow_factory.tasks_builder.gateway import (
 )
 from dbt_airflow_factory.tasks_builder.node_type import NodeType
 from dbt_airflow_factory.tasks_builder.utils import (
+    does_model_have_appropriate_tags,
+    generate_dag_id,
     is_ephemeral_task,
     is_model_run_task,
     is_source_sensor_task,
     is_test_task,
-    does_model_have_appropriate_tags,
-    generate_dag_id,
 )
 
 
@@ -35,7 +35,7 @@ class DbtAirflowGraph:
         self.graph = nx.DiGraph()
         self.configuration = configuration
 
-    def add_execution_tasks(self, manifest: dict, tags: List[str] = None) -> None:
+    def add_execution_tasks(self, manifest: dict, tags: Optional[List[str]] = None) -> None:
         self._add_gateway_execution_tasks(manifest=manifest)
 
         for node_name, manifest_node in manifest["nodes"].items():
@@ -339,7 +339,6 @@ class DbtAirflowGraph:
 
 
 def _get_node_properties(node_name: str, manifest: Dict[str, Any]) -> NodeProperties:
-
     resources = manifest["sources"] if is_source_sensor_task(node_name) else manifest["nodes"]
     return NodeProperties(
         node_name=node_name,

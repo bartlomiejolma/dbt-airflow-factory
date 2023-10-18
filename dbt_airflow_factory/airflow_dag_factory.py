@@ -1,7 +1,7 @@
 """Factory creating Airflow DAG."""
 
 import os
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 
 import airflow
 from airflow import DAG
@@ -13,13 +13,13 @@ if airflow.__version__.startswith("1."):
     from airflow.operators.dummy_operator import DummyOperator
 else:
     from airflow.operators.dummy import DummyOperator
-from airflow.operators.python import ShortCircuitOperator
-from airflow.models.dagrun import DagRun
-from airflow.utils.state import DagRunState
+
+from typing import List, Optional
+
 from airflow.models.dagbag import DagBag
-
-from typing import Dict, List
-
+from airflow.models.dagrun import DagRun
+from airflow.operators.python import ShortCircuitOperator
+from airflow.utils.state import DagRunState
 from pytimeparse import parse
 
 from dbt_airflow_factory.builder_factory import DbtAirflowTasksBuilderFactory
@@ -124,13 +124,20 @@ class AirflowDagFactory:
         return dags
 
     def create_tasks(
-        self, schedule: str = "", tags: List[str] = None, higher_priority_dag_ids: List[str] = None
+        self,
+        schedule: str = "",
+        tags: Optional[List[str]] = None,
+        higher_priority_dag_ids: Optional[List[str]] = None,
     ) -> None:
         """
         Parse ``manifest.json`` and create tasks based on the data contained there.
         """
 
-        ingestion_enabled = self.ingestion_config.get("enable", False)
+        if tags and "fifteen-minutes" in tags:
+            ingestion_enabled = False
+        else:
+            ingestion_enabled = self.ingestion_config.get("enable", False)
+
         start = self._create_starting_task()
 
         if ingestion_enabled and self.ingestion_tasks_builder_factory:
@@ -139,7 +146,6 @@ class AirflowDagFactory:
             ingestion_tasks >> start
 
         if higher_priority_dag_ids:
-
             condition_check = self._create_condition_check(higher_priority_dag_ids)
             condition_check >> start
             if ingestion_enabled and self.ingestion_tasks_builder_factory:
@@ -223,8 +229,7 @@ class AirflowDagFactory:
                     return True
             return False
 
-        def check_condition():
-
+        def check_condition() -> bool:
             return not (
                 check_if_any_dags_are_active(higher_priority_dag_ids)
                 or check_if_any_scheduled(higher_priority_dag_ids)
