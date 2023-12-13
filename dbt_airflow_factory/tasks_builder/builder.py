@@ -24,6 +24,7 @@ from dbt_airflow_factory.tasks import ModelExecutionTask, ModelExecutionTasks
 from dbt_airflow_factory.tasks_builder.gateway import TaskGraphConfiguration
 from dbt_airflow_factory.tasks_builder.graph import DbtAirflowGraph
 from dbt_airflow_factory.tasks_builder.utils import is_source_sensor_task
+from dbt_airflow_factory.airflow_powerbi_plugin.operators.powerbi_dataset_refresh_operator import PowerBIDatasetRefreshOperator
 
 
 def branch_func_wrapper(
@@ -181,6 +182,8 @@ class DbtAirflowTasksBuilder:
             return self._create_source_freshness_check(node)
         elif node["node_type"] == NodeType.MOCK_GATEWAY:
             return self._create_dummy_task(node)
+        elif node["node_type"] == NodeType.EXPOSURE:
+            return self._create_exposure_task(node)
         else:
             return self._create_task_for_model(
                 node["select"],
@@ -254,6 +257,8 @@ class DbtAirflowTasksBuilder:
         dbt_airflow_graph.create_edges_from_dependencies(
             self.airflow_config.enable_dags_dependencies, not self.airflow_config.run_tests_last
         )
+        if self.airflow_config.enable_exposures_task:
+            dbt_airflow_graph.add_exposure_tasks(manifest)
         if not self.airflow_config.show_ephemeral_models:
             dbt_airflow_graph.remove_ephemeral_nodes_from_graph()
         dbt_airflow_graph.contract_test_nodes()
@@ -324,3 +329,7 @@ class DbtAirflowTasksBuilder:
     @staticmethod
     def _create_dummy_task(node: Dict[str, Any]) -> ModelExecutionTask:
         return ModelExecutionTask(DummyOperator(task_id=node["select"]))
+
+    @staticmethod
+    def _create_exposure_task(node: Dict[str, Any]) -> ModelExecutionTask:
+        return ModelExecutionTask(PowerBIDatasetRefreshOperator(dataset_key=node["dataset_key"], group_id=node["group_id"]))
