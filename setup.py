@@ -21,6 +21,7 @@ EXTRA_REQUIRE = {
         "pandas==1.2.5",
         "apache-airflow[kubernetes,slack]==2.4.3",
         "apache-airflow-providers-airbyte==3.1.0",
+        "pendulum==2.1.2",
     ],
     "docs": [
         "sphinx==4.3.1",

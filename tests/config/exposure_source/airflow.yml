@@ -1,0 +1,27 @@
+default_args:
+  owner: Bartlomiej Olma
+  email:
+    - karim@kitopi.com
+    - karim@kitopi.com
+    - kirill.avilenko@kitopi.com
+  depends_on_past: False
+  start_date: 2021-10-20T00:00:00
+  email_on_failure: False
+  email_on_retry: False
+  retries: 1
+  retry_delay: 5m
+
+dag:
+  dag_id: business_function_erp_operations_dag
+  description: 'erp_operations business function dag - dbt image tag: v1.55.0'
+  schedule_interval: '0 2 * * *'
+  catchup: False
+
+
+seed_task: False
+manifest_file_name: ../tests/manifest_exposure_source.json
+use_task_group: False
+show_ephemeral_models: True
+run_tests_last: True
+enable_project_dependencies: True
+enable_exposures_task: True

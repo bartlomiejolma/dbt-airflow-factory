@@ -207,3 +207,25 @@ def test_should_add_airbyte_tasks_when_seed_is_not_available(
 boolean_mapper = {True: "enabled", False: "disabled"}
 
 starting_task_mapper = {True: "dbt_seed", False: "start"}
+
+def test_should_add_exposure_with_source():
+    # given
+    factory = AirflowDagFactory(path.dirname(path.abspath(__file__)), "exposure_source")
+
+    # when
+    dag = factory.create()[0]
+
+
+    # and number of tasks should be as expected
+    assert dag.tasks.__len__() > 500
+
+    # and tasks should be correctly matched to themselves
+    exposure_tasks = [
+        task for task in dag.tasks if task.task_id.startswith('exposure_')
+    ]
+
+    assert len(exposure_tasks) == 2
+
+    ck_exposure = [exposure_task for exposure_task in exposure_tasks if exposure_task.task_id == 'exposure_scm_ck_metrics'][0]
+
+    assert ck_exposure.upstream_task_ids == {"report_erp__ck_metrics_2m_daily_run", "join_business_function_kitchen_operations_dag_0_2_x_x_x_report_seven_shifts_for_ck_metrics_2m_daily"}

@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import networkx as nx
+from airflow.models import Variable
 
 from dbt_airflow_factory.tasks_builder.gateway import (
     NodeProperties,
@@ -77,6 +78,12 @@ class DbtAirflowGraph:
         error_after = freshness.get("error_after", {})
         error_after_count = error_after.get("count")
         return warn_after_count or error_after_count
+
+    def add_exposure_tasks(self, manifest: dict) -> None:
+        manifest_exposures = manifest["exposures"]
+        for exposure_name, exposure in manifest_exposures.items():
+            logging.info(f"Creating exposure for {exposure['name']}")
+            self._add_exposure_node(exposure_name, exposure, manifest=manifest)
 
     def add_external_dependencies(
         self, manifest: dict, schedule: str, tags: Optional[List[str]] = None
@@ -229,6 +236,20 @@ class DbtAirflowGraph:
     ) -> None:
         self._add_execution_graph_node(
             node_name, manifest_node, NodeType.MULTIPLE_DEPS_TEST, manifest, tags
+        )
+
+    def _add_exposure_node(self,node_name: str,manifest_node: Dict[str, Any],
+        manifest: dict,) -> None:
+        dataset = manifest_node.get("meta", {}).get("dataset", {}).get(Variable.get("env", "dev"), None)
+        if not dataset:
+            return
+        self.graph.add_node(
+            node_name,
+            select=manifest_node["name"],
+            dataset_key=dataset["key"],
+            group_id=dataset["workspace"],
+            depends_on=self._get_model_dependencies_from_manifest_node(manifest_node, manifest),
+            node_type=NodeType.EXPOSURE,
         )
 
     def _get_test_with_multiple_deps_names_by_deps(
