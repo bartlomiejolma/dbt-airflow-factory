@@ -20,6 +20,7 @@ from airflow.models.dagbag import DagBag
 from airflow.models.dagrun import DagRun
 from airflow.operators.python import ShortCircuitOperator
 from airflow.utils.state import DagRunState
+from airflow.utils.trigger_rule import TriggerRule
 from pytimeparse import parse
 
 from dbt_airflow_factory.builder_factory import DbtAirflowTasksBuilderFactory
@@ -173,7 +174,7 @@ class AirflowDagFactory:
         if self.airflow_config.get("seed_task", True):
             return self._builder.create_seed_task()
         else:
-            return DummyOperator(task_id="start")
+            return DummyOperator(task_id="start", trigger_rule=TriggerRule.ALL_DONE)
 
     def _manifest_file_path(self) -> str:
         file_dir = self.airflow_config.get("manifest_dir_path", self.dag_path)
