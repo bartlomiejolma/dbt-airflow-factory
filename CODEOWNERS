@@ -1,0 +1,12 @@
+^[devops] @kitopi-com/codeowners/devops
+deployment/
+[data-engineers][1] @kitopi-com/codeowners/data-engineers
+*
+CODEOWNERS @kitopi-com/codeowners/devops
+.gitlab-ci.yml @kitopi-com/codeowners/devops
+
+[data-release-engineers][1] @kitopi-com/codeowners/data-release-engineers
+*
+CODEOWNERS @kitopi-com/codeowners/devops
+.gitlab-ci.yml @kitopi-com/codeowners/devops
+
