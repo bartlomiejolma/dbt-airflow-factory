@@ -19,12 +19,14 @@ if not airflow.__version__.startswith("1."):
 
 from typing import List
 
+from dbt_airflow_factory.airflow_powerbi_plugin.operators.powerbi_dataset_refresh_operator import (
+    PowerBIDatasetRefreshOperator,
+)
 from dbt_airflow_factory.operator import DbtRunOperatorBuilder, EphemeralOperator
 from dbt_airflow_factory.tasks import ModelExecutionTask, ModelExecutionTasks
 from dbt_airflow_factory.tasks_builder.gateway import TaskGraphConfiguration
 from dbt_airflow_factory.tasks_builder.graph import DbtAirflowGraph
 from dbt_airflow_factory.tasks_builder.utils import is_source_sensor_task
-from dbt_airflow_factory.airflow_powerbi_plugin.operators.powerbi_dataset_refresh_operator import PowerBIDatasetRefreshOperator
 
 
 def branch_func_wrapper(
@@ -289,7 +291,7 @@ class DbtAirflowTasksBuilder:
             allowed_states=["success"],
             failed_states=["failed", "skipped"],
             mode="reschedule",
-            poke_interval=60,
+            poke_interval=300,
             check_existence=True,
         )
 
@@ -332,4 +334,8 @@ class DbtAirflowTasksBuilder:
 
     @staticmethod
     def _create_exposure_task(node: Dict[str, Any]) -> ModelExecutionTask:
-        return ModelExecutionTask(PowerBIDatasetRefreshOperator(task_id=node["select"], dataset_key=node["dataset_key"], group_id=node["group_id"]))
+        return ModelExecutionTask(
+            PowerBIDatasetRefreshOperator(
+                task_id=node["select"], dataset_key=node["dataset_key"], group_id=node["group_id"]
+            )
+        )
