@@ -309,7 +309,7 @@ class DbtAirflowTasksBuilder:
             failed_states=["failed", "skipped"],
             mode="reschedule",
             poke_interval=300,
-            check_existence=True,
+            check_existence=False,
         )
 
         skip_sensor = DummyOperator(
