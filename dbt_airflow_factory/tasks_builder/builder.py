@@ -127,6 +127,14 @@ class DbtAirflowTasksBuilder:
             model_name,
         )
 
+    def _make_dbt_snapshot_task(self, model_name: str, is_in_task_group: bool) -> BaseOperator:
+        command = "snapshot"
+        return self.operator_builder.create(
+            self._build_task_name(model_name, command, is_in_task_group),
+            command,
+            model_name,
+        )
+
     def _make_dbt_source_freshness_task(self, source_name: str) -> BaseOperator:
         command = "source freshness"
         select_name = f"source:{source_name}"
@@ -154,7 +162,12 @@ class DbtAirflowTasksBuilder:
         return task_group, task_group_ctx
 
     def _create_task_for_model(
-        self, model_name: str, is_ephemeral_task: bool, use_task_group: bool, with_tests: bool
+        self,
+        model_name: str,
+        is_ephemeral_task: bool,
+        is_snapshot_task: bool,
+        use_task_group: bool,
+        with_tests: bool,
     ) -> ModelExecutionTask:
         if is_ephemeral_task:
             return ModelExecutionTask(EphemeralOperator(task_id=f"{model_name}__ephemeral"), None)
@@ -162,7 +175,10 @@ class DbtAirflowTasksBuilder:
         (task_group, task_group_ctx) = self._create_task_group_for_model(model_name, use_task_group)
         is_in_task_group = task_group is not None
         with task_group_ctx:
-            run_task = self._make_dbt_run_task(model_name, is_in_task_group)
+            if is_snapshot_task:
+                run_task = self._make_dbt_snapshot_task(model_name, is_in_task_group)
+            else:
+                run_task = self._make_dbt_run_task(model_name, is_in_task_group)
             test_task = (
                 self._make_dbt_test_task(model_name, is_in_task_group) if with_tests else None
             )
@@ -190,6 +206,7 @@ class DbtAirflowTasksBuilder:
             return self._create_task_for_model(
                 node["select"],
                 node["node_type"] == NodeType.EPHEMERAL,
+                node["node_type"] == NodeType.SNAPSHOT,
                 self.airflow_config.use_task_group,
                 with_tests=node["with_tests"],
             )

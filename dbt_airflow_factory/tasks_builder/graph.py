@@ -21,6 +21,7 @@ from dbt_airflow_factory.tasks_builder.utils import (
     generate_dag_id,
     is_ephemeral_task,
     is_model_run_task,
+    is_snapshot_task,
     is_source_sensor_task,
     is_test_task,
 )
@@ -45,6 +46,9 @@ class DbtAirflowGraph:
             if is_model_run_task(node_name):
                 logging.info("Creating tasks for: " + node_name)
                 self._add_graph_node_for_model_run_task(node_name, manifest_node, manifest, tags)
+            if is_snapshot_task(node_name):
+                logging.info("Creating tasks for: " + node_name)
+                self._add_graph_node_for_snapshot_task(node_name, manifest_node, manifest, tags)
             elif (
                 is_test_task(node_name)
                 and len(self._get_model_dependencies_from_manifest_node(manifest_node, manifest))
@@ -227,6 +231,21 @@ class DbtAirflowGraph:
             tags,
         )
 
+    def _add_graph_node_for_snapshot_task(
+        self,
+        node_name: str,
+        manifest_node: Dict[str, Any],
+        manifest: dict,
+        tags: Optional[List[str]],
+    ) -> None:
+        self._add_execution_graph_node(
+            node_name,
+            manifest_node,
+            NodeType.SNAPSHOT,
+            manifest,
+            tags,
+        )
+
     def _add_graph_node_for_multiple_deps_test(
         self,
         node_name: str,
@@ -238,9 +257,15 @@ class DbtAirflowGraph:
             node_name, manifest_node, NodeType.MULTIPLE_DEPS_TEST, manifest, tags
         )
 
-    def _add_exposure_node(self,node_name: str,manifest_node: Dict[str, Any],
-        manifest: dict,) -> None:
-        dataset = manifest_node.get("meta", {}).get("dataset", {}).get(Variable.get("env", "dev"), None)
+    def _add_exposure_node(
+        self,
+        node_name: str,
+        manifest_node: Dict[str, Any],
+        manifest: dict,
+    ) -> None:
+        dataset = (
+            manifest_node.get("meta", {}).get("dataset", {}).get(Variable.get("env", "dev"), None)
+        )
         if not dataset:
             return
         self.graph.add_node(

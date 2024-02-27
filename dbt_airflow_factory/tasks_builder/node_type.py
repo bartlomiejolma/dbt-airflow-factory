@@ -9,3 +9,4 @@ class NodeType(Enum):
     MOCK_GATEWAY = 5
     SOURCE_FRESHNESS = 6
     EXPOSURE = 7
+    SNAPSHOT = 8

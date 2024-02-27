@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List, Optional
 
 
 def is_task_type(node_name: str, task_type: str) -> bool:
@@ -7,6 +7,10 @@ def is_task_type(node_name: str, task_type: str) -> bool:
 
 def is_model_run_task(node_name: str) -> bool:
     return is_task_type(node_name, "model")
+
+
+def is_snapshot_task(node_name: str) -> bool:
+    return is_task_type(node_name, "snapshot")
 
 
 def is_source_sensor_task(node_name: str) -> bool:
@@ -21,7 +25,7 @@ def is_ephemeral_task(node: dict) -> bool:
     return node["config"]["materialized"] == "ephemeral"
 
 
-def does_model_have_appropriate_tags(node: dict, tags=None) -> bool:
+def does_model_have_appropriate_tags(node: dict, tags: Optional[List[str]] = None) -> bool:
     if not tags:
         return True
 
@@ -33,9 +37,9 @@ def does_model_have_appropriate_tags(node: dict, tags=None) -> bool:
 def transform_cron_expression(cron_expr: str) -> str:
     """
     This function accepts a string `cron_expr` and returns another string. The `cron_expr` string
-    represents a cron schedule. It splits the `cron_expr` into components and transforms each component
-    by replacing any `,` in it with `-`. It then joins the transformed components with `_` and replaces
-    any `*` with `x`.
+    represents a cron schedule. It splits the `cron_expr` into components and transforms each
+    component by replacing any `,` in it with `-`. It then joins the transformed components
+    with `_` and replaces any `*` with `x`.
 
     Args:
         cron_expr (str): A string representing a cron schedule.
@@ -57,7 +61,8 @@ def transform_cron_expression(cron_expr: str) -> str:
 
 def generate_dag_id(properties: Dict) -> str:
     """
-    This function takes a dictionary `properties` as input and returns a string that represents the `dag_id`.
+    This function takes a dictionary `properties` as input and returns a string
+    that represents the `dag_id`.
 
     Args:
         properties (Dict): A dictionary containing the `dag_id` key and the `schedule_interval` key.
@@ -69,7 +74,8 @@ def generate_dag_id(properties: Dict) -> str:
 
     # apply the transform_cron_expression function on the `schedule_interval` key in `properties`
     schedule_interval = transform_cron_expression(properties["schedule_interval"])
-    # create a list of `dag_id_parts` which consists of the `dag_id` key in `properties` and the transformed `schedule_interval`
+    # create a list of `dag_id_parts` which consists of the `dag_id` key
+    # in `properties` and the transformed `schedule_interval`
     dag_id_parts = [properties["dag_id"], schedule_interval]
     # join `dag_id_parts` with `_` and return the resulting string as the `dag_id`
     dag_id = "_".join(dag_id_parts)
